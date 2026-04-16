@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cd49ba479b17a4546886fcb86028ffb7, type: 3}
+  m_Name: ToonShadowSettings
+  m_EditorClassIdentifier: 
+  enabled: 1
+  shadowDistance: 60
+  cascadeCount: 4
+  split1: 0.067
+  split2: 0.2
+  split3: 0.467
+  depthBias: 1
+  normalBias: 1
+  softShadows: 1
