@@ -15,9 +15,9 @@ MonoBehaviour:
   enabled: 1
   shadowDistance: 10
   cascadeCount: 4
-  split1: 0.13
+  split1: 0.054
   split2: 0.307
-  split3: 0.575
-  depthBias: 1.9
-  normalBias: 1.96
+  split3: 0.95
+  depthBias: 0
+  normalBias: 3
   softShadows: 1
