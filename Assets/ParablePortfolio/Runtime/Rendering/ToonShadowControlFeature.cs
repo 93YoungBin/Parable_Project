@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -7,30 +8,32 @@ using UnityEngine.Rendering.Universal;
 namespace Parable.Rendering
 {
     /// <summary>
-    /// URPAsset의 Shadow/Cascade 값을 카메라 렌더 전/후로 교체·복원하는 Feature.
+    /// URPAsset의 Shadow/Cascade 값을 런타임으로 교체하는 Feature.
     /// URP 14에서 cascade split setter가 private이므로 Reflection으로 접근.
     ///
     /// 시행착오 메모:
     ///   - ScriptableRenderPass.Execute 타이밍에서 URPAsset을 수정하면
     ///     이미 Shadow Pass가 끝난 뒤라 효과 없음.
     ///   - RenderPipelineManager.beginCameraRendering 이 올바른 후킹 지점.
+    ///   - per-frame Restore는 불필요: beginCameraRendering에서 매 프레임 Apply가
+    ///     덮어쓰므로, Restore는 Dispose(씬 종료/Play Mode 종료) 시 1회만 수행.
     /// </summary>
     [Serializable]
     public class ToonShadowControlFeature : ScriptableRendererFeature
     {
         public ToonShadowSettings shadowSettings;
 
-        // ── Reflection 캐시 (URPAsset private fields) ─────────────────
-        static readonly FieldInfo s_CascadeCount  = typeof(UniversalRenderPipelineAsset)
-            .GetField("m_ShadowCascadeCount",  BindingFlags.NonPublic | BindingFlags.Instance);
+        // ── Reflection 캐시 (cascade split: internal setter, 외부 어셈블리 접근 불가) ──
+        // shadowCascadeCount : public setter  → 직접 접근
+        // cascade2/3/4Split  : internal setter → Reflection 필요
         static readonly FieldInfo s_Cascade2Split = typeof(UniversalRenderPipelineAsset)
-            .GetField("m_Cascade2Split",        BindingFlags.NonPublic | BindingFlags.Instance);
+            .GetField("m_Cascade2Split", BindingFlags.NonPublic | BindingFlags.Instance);
         static readonly FieldInfo s_Cascade3Split = typeof(UniversalRenderPipelineAsset)
-            .GetField("m_Cascade3Split",        BindingFlags.NonPublic | BindingFlags.Instance);
+            .GetField("m_Cascade3Split", BindingFlags.NonPublic | BindingFlags.Instance);
         static readonly FieldInfo s_Cascade4Split = typeof(UniversalRenderPipelineAsset)
-            .GetField("m_Cascade4Split",        BindingFlags.NonPublic | BindingFlags.Instance);
+            .GetField("m_Cascade4Split", BindingFlags.NonPublic | BindingFlags.Instance);
 
-        // ── 복원용 스냅샷 ────────────────────────────────────────────
+        // ── 원본값 스냅샷 (최초 1회) ─────────────────────────────────
         struct ShadowSnapshot
         {
             public float   shadowDistance;
@@ -41,7 +44,12 @@ namespace Parable.Rendering
             public float   depthBias;
             public float   normalBias;
         }
-        ShadowSnapshot _saved;
+        ShadowSnapshot _original;
+        bool           _snapshotTaken;
+        bool           _lastEnabled;
+
+        // ── 카메라 필터링 캐시 (카메라당 1회만 GetComponent) ─────────
+        readonly Dictionary<UnityEngine.Camera, bool> _camCache = new Dictionary<UnityEngine.Camera, bool>();
 
         UniversalRenderPipelineAsset _urpAsset;
 
@@ -51,13 +59,19 @@ namespace Parable.Rendering
             _urpAsset = GraphicsSettings.defaultRenderPipeline as UniversalRenderPipelineAsset;
 
             RenderPipelineManager.beginCameraRendering += OnBeginCamera;
-            RenderPipelineManager.endCameraRendering   += OnEndCamera;
+            // endCameraRendering 콜백 불필요: per-frame Restore 제거
         }
 
         protected override void Dispose(bool disposing)
         {
             RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
-            RenderPipelineManager.endCameraRendering   -= OnEndCamera;
+
+            _camCache.Clear();
+
+            // 씬 종료 / Play Mode 종료 / 앱 종료 시 원본값 1회 복원
+            // → 에디터 Pipeline Asset 오염 방지
+            if (_snapshotTaken && _urpAsset != null)
+                Restore(_urpAsset, _original);
         }
 
         // ScriptableRenderPass는 이 Feature에서 사용하지 않음
@@ -65,29 +79,50 @@ namespace Parable.Rendering
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData) { }
 
         // ─────────────────────────────────────────────────────────────
-        void OnBeginCamera(ScriptableRenderContext ctx, Camera cam)
-        {
-            if (shadowSettings == null || !shadowSettings.enabled || _urpAsset == null)
-                return;
-
-            // 현재값 스냅샷
-            _saved = Snapshot(_urpAsset);
-
-            // 오버라이드 적용
-            Apply(_urpAsset, shadowSettings);
-        }
-
-        void OnEndCamera(ScriptableRenderContext ctx, Camera cam)
+        void OnBeginCamera(ScriptableRenderContext ctx, UnityEngine.Camera cam)
         {
             if (_urpAsset == null) return;
-            Restore(_urpAsset, _saved);
+
+            // Game 카메라만 처리 (SceneView / Preview / Reflection 등 제외)
+            if (cam.cameraType != CameraType.Game) return;
+
+            // UI 전용 카메라 제외 (UI 레이어만 렌더링하는 카메라)
+            if (!_camCache.TryGetValue(cam, out bool allowed))
+            {
+                int uiOnly = 1 << LayerMask.NameToLayer("UI");
+                allowed = cam.cullingMask != uiOnly;
+                _camCache[cam] = allowed;
+            }
+            if (!allowed) return;
+
+            bool enabled = shadowSettings != null && shadowSettings.enabled;
+
+            // enabled가 꺼진 순간 즉시 원본값 복원
+            if (_lastEnabled && !enabled)
+            {
+                if (_snapshotTaken) Restore(_urpAsset, _original);
+                _lastEnabled = false;
+                return;
+            }
+
+            if (!enabled) return;
+
+            // 원본값 최초 1회만 스냅샷
+            if (!_snapshotTaken)
+            {
+                _original      = Snapshot(_urpAsset);
+                _snapshotTaken = true;
+            }
+
+            Apply(_urpAsset, shadowSettings);
+            _lastEnabled = true;
         }
 
         // ── 헬퍼 ─────────────────────────────────────────────────────
         static ShadowSnapshot Snapshot(UniversalRenderPipelineAsset a) => new ShadowSnapshot
         {
             shadowDistance = a.shadowDistance,
-            cascadeCount   = (int)(s_CascadeCount?.GetValue(a) ?? 1),
+            cascadeCount   = a.shadowCascadeCount,
             cascade2Split  = (float)(s_Cascade2Split?.GetValue(a) ?? 0.25f),
             cascade3Split  = (Vector2)(s_Cascade3Split?.GetValue(a) ?? Vector2.zero),
             cascade4Split  = (Vector3)(s_Cascade4Split?.GetValue(a) ?? Vector3.zero),
@@ -101,7 +136,7 @@ namespace Parable.Rendering
             a.shadowDepthBias  = s.depthBias;
             a.shadowNormalBias = s.normalBias;
 
-            s_CascadeCount?.SetValue(a, s.cascadeCount);
+            a.shadowCascadeCount = s.cascadeCount;
 
             switch (s.cascadeCount)
             {
@@ -124,11 +159,17 @@ namespace Parable.Rendering
 
         static void Restore(UniversalRenderPipelineAsset a, ShadowSnapshot snap)
         {
-            a.shadowDistance   = snap.shadowDistance;
+            if (snap.shadowDistance > 0f)
+                a.shadowDistance = snap.shadowDistance;
+
             a.shadowDepthBias  = snap.depthBias;
             a.shadowNormalBias = snap.normalBias;
 
-            s_CascadeCount?.SetValue(a,  snap.cascadeCount);
+            // cascadeCount가 0이면 이전 Reflection 코드가 검증 우회해서 쓴 오염값
+            // → 유효 범위(1~4)로 클램프
+            int safeCount = Mathf.Clamp(snap.cascadeCount, 1, 4);
+            a.shadowCascadeCount = safeCount;
+
             s_Cascade2Split?.SetValue(a, snap.cascade2Split);
             s_Cascade3Split?.SetValue(a, snap.cascade3Split);
             s_Cascade4Split?.SetValue(a, snap.cascade4Split);

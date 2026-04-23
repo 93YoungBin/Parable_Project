@@ -1,5 +1,19 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-5088943009729330795
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 61012bc9fd2d0f44c98f22e7ec792780, type: 3}
+  m_Name: ToonPostProcessFeature
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  settings: {fileID: 11400000, guid: acf35a7715aaac74f9cf17c2ac293d5f, type: 2}
 --- !u!114 &-3825674404611865405
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29,12 +43,16 @@ MonoBehaviour:
   m_Active: 1
   settings:
     isEnabled: 1
-    renderPassEvent: 300
+    outlineRenderingLayerMask: 256
+    outlineOverrideMaterial: {fileID: 2100000, guid: 04052ed58b91c994589d68632601d838, type: 2}
+    outlineEvent: 300
     overrideGlobalRamp: 0
     globalRampThreshold: 0.5
     globalRampSmooth: 0.04
     overrideGlobalOutline: 0
     globalOutlineWidth: 0.005
+    overrideShadowColor: 0
+    shadowColor: {r: 0.25, g: 0.28, b: 0.4, a: 1}
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -53,6 +71,7 @@ MonoBehaviour:
   m_RendererFeatures:
   - {fileID: -674059268503748713}
   - {fileID: -3825674404611865405}
+  - {fileID: -5088943009729330795}
   m_RendererFeatureMap: 
   m_UseNativeRenderPass: 0
   postProcessData: {fileID: 0}

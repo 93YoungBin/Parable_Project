@@ -85,101 +85,50 @@ Shader "Parable/ToonLit"
             {
                 half4 baseColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv) * _BaseColor;
                 float3 normalWS = normalize(IN.normalWS);
+                float3 viewDir  = normalize(GetWorldSpaceViewDir(IN.positionWS));
 
                 // ── Main Light ─────────────────────────────────────
                 Light mainLight = GetMainLight(IN.shadowCoord);
-                float NdotL     = dot(normalWS, mainLight.direction);
 
-                // ── Ramp Cel-Shading ───────────────────────────────
-                half ramp;
+                // ── 뷰 기반 셀 팩터 ────────────────────────────────
+                // NdotV: 카메라를 향하는 면=1(lit), 옆/뒷면=0(shadow)
+                // → 정면은 텍스처 원색, 실루엣 테두리만 shadow color
+                float NdotV    = saturate(dot(normalWS, viewDir));
+                half  viewRamp = smoothstep(_RampThreshold, _RampThreshold + _RampSmooth, NdotV);
+
+                // ── 라이트 기반 cast shadow 보정 ────────────────────
+                // NdotL은 cast shadow(다른 물체에 의한 그림자)에만 약하게 사용
+                float NdotL    = dot(normalWS, mainLight.direction);
+                half  ramp;
                 #if _USE_RAMP_TEX
                     ramp = RampLightingTex(TEXTURE2D_ARGS(_RampMap, sampler_RampMap), NdotL);
                 #else
                     ramp = RampLighting(NdotL);
                 #endif
+                half shadow = mainLight.shadowAttenuation;
+                // cast shadow만 반영 (라이트 각도로 인한 어두움은 최소화)
+                half lightMod = max(ramp * shadow, 0.45);
 
-                half shadow  = mainLight.shadowAttenuation;
-                float3 lit   = lerp(_ShadowColor.rgb, baseColor.rgb, ramp * shadow);
-                lit         *= mainLight.color;
+                // ── 최종 셀 팩터 합성 ────────────────────────────────
+                // 뷰 기반(실루엣) × 라이트(cast shadow만) → 자연스러운 셀 셰이딩
+                half celFactor = viewRamp * lightMod;
+                float3 cel     = lerp(_ShadowColor.rgb, baseColor.rgb, celFactor);
 
-                // ── Blinn-Phong Specular (Step 기반) ──────────────
-                float3 viewDir  = normalize(GetWorldSpaceViewDir(IN.positionWS));
+                // ── Specular ─────────────────────────────────────────
                 float3 halfDir  = normalize(mainLight.direction + viewDir);
                 float  NdotH    = max(0, dot(normalWS, halfDir));
-                float  specMask = step(1.0 - _SpecularSize, NdotH);
-                lit += specMask * _SpecularIntensity * mainLight.color * shadow;
+                float  specMask = step(1.0 - _SpecularSize, NdotH) * shadow * viewRamp;
+                cel += specMask * _SpecularIntensity * 0.6;
 
-                // ── Additional Lights ──────────────────────────────
-                #ifdef _ADDITIONAL_LIGHTS
-                uint lightCount = GetAdditionalLightsCount();
-                for (uint i = 0u; i < lightCount; ++i)
-                {
-                    Light addLight = GetAdditionalLight(i, IN.positionWS);
-                    float addNdotL = max(0, dot(normalWS, addLight.direction));
-                    lit += baseColor.rgb * addLight.color * addNdotL
-                           * addLight.distanceAttenuation * addLight.shadowAttenuation * 0.5;
-                }
-                #endif
-
-                half3 color = MixFog(lit, IN.fogFactor);
+                half3 color = MixFog(cel, IN.fogFactor);
                 return half4(color, baseColor.a);
             }
             ENDHLSL
         }
 
-        // ─── Pass 1 : Outline (Inverted Hull, Screen-space 두께) ─────────
-        Pass
-        {
-            Name "Outline"
-            Tags { "LightMode"="SRPDefaultUnlit" }
-            Cull Front
-
-            HLSLPROGRAM
-            #pragma vertex   vertOutline
-            #pragma fragment fragOutline
-
-            #include "Includes/ToonLitInput.hlsl"
-
-            struct AttributesOutline
-            {
-                float4 positionOS : POSITION;
-                float3 normalOS   : NORMAL;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
-
-            struct VaryingsOutline
-            {
-                float4 positionCS : SV_POSITION;
-                UNITY_VERTEX_OUTPUT_STEREO
-            };
-
-            VaryingsOutline vertOutline(AttributesOutline IN)
-            {
-                VaryingsOutline OUT;
-                UNITY_SETUP_INSTANCE_ID(IN);
-                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(OUT);
-
-                float4 posCS    = TransformObjectToHClip(IN.positionOS.xyz);
-                float3 normalVS = mul((float3x3)UNITY_MATRIX_IT_MV, IN.normalOS);
-
-                // Screen-space 균일 두께: UNITY_MATRIX_P로 직접 프로젝션
-                float2 normalCS = normalize(float2(
-                    UNITY_MATRIX_P[0][0] * normalVS.x,
-                    UNITY_MATRIX_P[1][1] * normalVS.y));
-                posCS.xy += normalCS * _OutlineWidth * posCS.w;
-
-                OUT.positionCS = posCS;
-                return OUT;
-            }
-
-            half4 fragOutline(VaryingsOutline IN) : SV_Target
-            {
-                return _OutlineColor;
-            }
-            ENDHLSL
-        }
-
         // ─── Shadow Caster ───────────────────────────────────────────────
+        // NOTE: Outline 패스는 ToonRendererFeature + ToonOutlineReplace.shader 조합의
+        //       레이어 기반 override로 이관됨. 이 셰이더는 순수 Ramp Lit 역할만 담당한다.
         Pass
         {
             Name "ShadowCaster"
