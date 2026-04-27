@@ -12,7 +12,7 @@ namespace Parable.Motion
     /// │    └→ Animator가 수행 (HumanPose 포맷 자체가 중간 포맷)│
     /// │                                                  │
     /// │  Stage 1: Real-time Cleanup                     │
-    /// │    └→ EMA + Outlier Rejection (마커 가림 보정)   │
+    /// │    └→ EMA + Kalman (마커 가림 보정)               │
     /// │                                                  │
     /// │  Stage 3: Avatar-Specific Retargeting           │
     /// │    └→ 아바타별 비율/골격 보정 (프로필 교체)        │
@@ -36,6 +36,11 @@ namespace Parable.Motion
     [RequireComponent(typeof(Animator))]
     public class MotionPipeline : MonoBehaviour
     {
+        [Header("모션 소스 — MediaPipe (선택)")]
+        [Tooltip("할당 시 웹캠 모캡 데이터를 파이프라인 입력으로 사용.\n" +
+                 "null 이면 Animator(Idle 클립)의 포즈를 그대로 통과.")]
+        public MediaPipePoseTracker poseTracker;
+
         [Header("Stage 1 — Real-time Cleanup")]
         public MotionCleanupModule cleanup = new MotionCleanupModule();
 
@@ -61,6 +66,10 @@ namespace Parable.Motion
         HumanPoseHandler _handler;
         HumanPose        _pose;
 
+        // MediaPipe 랜드마크 버퍼
+        readonly Vector3[] _landmarks    = new Vector3[MediaPipePoseTracker.LANDMARK_COUNT];
+        readonly float[]   _visibilities = new float[MediaPipePoseTracker.LANDMARK_COUNT];
+
         // ── 생명주기 ──────────────────────────────────────────────────
 
         void Awake()
@@ -79,23 +88,22 @@ namespace Parable.Motion
 
         /// <summary>
         /// LateUpdate: Animator가 이미 Idle 클립을 평가한 뒤 실행.
-        ///
-        /// 실행 순서:
-        ///   [Animator 내부 평가 — Idle 클립 → 올바른 bodyPosition 포함 포즈]
-        ///     ↓
-        ///   LateUpdate: GetHumanPose (읽기) → 파이프라인 처리 → SetHumanPose (쓰기)
-        ///
-        /// bodyPosition을 Animator에서 읽어 그대로 유지하므로 sinking 없음.
         /// </summary>
         void LateUpdate()
         {
             // Stage 2: Animator(Humanoid) 평가 결과 읽기
-            // → bodyPosition 포함, 올바른 서있는 포즈
             _handler.GetHumanPose(ref _pose);
 
-            // [테스트] 노이즈 주입 — 실제 모캡 jitter/마커 가림 시뮬레이션
-            if (injectNoise)
+            // ── 모션 소스 ────────────────────────────────────────────
+            if (poseTracker != null && poseTracker.IsRunning)
+            {
+                if (poseTracker.TryGetWorldLandmarks(_landmarks, _visibilities))
+                    MediaPipeLandmarkConverter.Apply(_landmarks, _visibilities, ref _pose);
+            }
+            else if (injectNoise)
+            {
                 InjectTestNoise();
+            }
 
             // Stage 1: Real-time Cleanup
             if (cleanup.enabled)
@@ -106,13 +114,11 @@ namespace Parable.Motion
                 avatarSpecific.Process(ref _pose);
 
             // 처리된 포즈 적용
-            // bodyPosition은 Animator 읽은 값 그대로 → sinking 없음
             _handler.SetHumanPose(ref _pose);
         }
 
         /// <summary>
-        /// OnAnimatorIK: LateUpdate 이전에 Animator IK 콜백.
-        /// Foot IK는 파이프라인 "단계"가 아닌 별도 타이밍 도메인.
+        /// OnAnimatorIK: Foot IK는 파이프라인 "단계"가 아닌 별도 타이밍 도메인.
         /// </summary>
         void OnAnimatorIK(int layerIndex)
         {
@@ -126,19 +132,13 @@ namespace Parable.Motion
 
         // ── 테스트 헬퍼 ──────────────────────────────────────────────
 
-        /// <summary>
-        /// 의도적 jitter + 마커 가림 주입.
-        /// Stage 1 Cleanup이 켜지면 제거되는 것을 확인할 수 있음.
-        /// </summary>
         void InjectTestNoise()
         {
             for (int i = 0; i < _pose.muscles.Length; i++)
             {
-                // Gaussian-like noise (Box-Muller 근사)
                 float noise = (Random.value + Random.value - 1f) * noiseAmount;
                 _pose.muscles[i] = Mathf.Clamp(_pose.muscles[i] + noise, -1f, 1f);
 
-                // Outlier: 일정 확률로 값이 끝으로 튐 (마커 가림 시뮬레이션)
                 if (outlierProbability > 0f && Random.value < outlierProbability)
                     _pose.muscles[i] = Random.value > 0.5f ? 1f : -1f;
             }

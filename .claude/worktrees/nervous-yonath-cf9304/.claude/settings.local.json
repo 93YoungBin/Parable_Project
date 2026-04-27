@@ -10,7 +10,11 @@
       "WebFetch(domain:www.unitysquare.co.kr)",
       "mcp__UnityMCP__refresh_unity",
       "mcp__UnityMCP__find_gameobjects",
-      "mcp__UnityMCP__manage_components"
+      "mcp__UnityMCP__manage_components",
+      "Bash(del \"C:\\\\Users\\\\Bin\\\\Documents\\\\Parable_Project\\\\Assets\\\\ParablePortfolio\\\\Runtime\\\\Motion\\\\MediaPipeReceiver.cs\")",
+      "mcp__UnityMCP__manage_editor",
+      "mcp__UnityMCP__validate_script",
+      "mcp__UnityMCP__delete_script"
     ]
   }
 }

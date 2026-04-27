@@ -10,6 +10,15 @@
       },
       "hash": "73eb27aeccfa8e0676eaf3304136e9b85953d913"
     },
+    "com.github.homuler.mediapipe": {
+      "version": "file:com.github.homuler.mediapipe",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.ugui": "1.0.0",
+        "com.unity.test-framework": "1.0.0"
+      }
+    },
     "com.unity.burst": {
       "version": "1.8.21",
       "depth": 1,
