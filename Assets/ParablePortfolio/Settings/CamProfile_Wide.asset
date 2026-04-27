@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee0694a8a35beba4192084eb5e84f80e, type: 3}
+  m_Name: CamProfile_Wide
+  m_EditorClassIdentifier:
+  focalLength: 16
+  sensorSize: {x: 24.89, y: 18.66}
+  aperture: 8
+  focusDistance: 10
+  iso: 200
+  shutterSpeed: 0.02
+  nearClipPlane: 0.3
+  farClipPlane: 1000
+  followDampingX: 1
+  followDampingY: 1
+  followDampingZ: 1
+  lookAheadTime: 0
+  lookAheadIgnoreY: 1
+  aimDampingH: 0.5
+  aimDampingV: 0.5
+  noiseAmplitude: 0
+  noiseFrequency: 1
+  blendDuration: 0.8
+  blendStyle: 4
+  overrideShadow: 1
+  shadowDistance: 60
+  cascadeCount: 4
+  split1: 0.067
+  split2: 0.2
+  split3: 0.467
