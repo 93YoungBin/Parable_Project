@@ -14,7 +14,10 @@
       "Bash(del \"C:\\\\Users\\\\Bin\\\\Documents\\\\Parable_Project\\\\Assets\\\\ParablePortfolio\\\\Runtime\\\\Motion\\\\MediaPipeReceiver.cs\")",
       "mcp__UnityMCP__manage_editor",
       "mcp__UnityMCP__validate_script",
-      "mcp__UnityMCP__delete_script"
+      "mcp__UnityMCP__delete_script",
+      "Bash(python -c ' *)",
+      "Read(//c/Users/Bin/Documents/Parable_Project/Assets/ParablePortfolio/Runtime/Motion/**)",
+      "Bash(del /f MediaPipeReceiver.cs MediaPipeReceiver.cs.meta MediaPipePoseDebugger.cs MediaPipePoseDebugger.cs.meta MediaPipePoseTracker.cs MediaPipePoseTracker.cs.meta MediaPipeLandmarkConverter.cs MediaPipeLandmarkConverter.cs.meta MotionPipeline.cs MotionPipeline.cs.meta MotionData.cs MotionData.cs.meta MotionCleanupModule.cs MotionCleanupModule.cs.meta AvatarSpecificStage.cs AvatarSpecificStage.cs.meta HumanoidRetargeter.cs HumanoidRetargeter.cs.meta AvatarCalibrationProfile.cs AvatarCalibrationProfile.cs.meta)"
     ]
   }
 }

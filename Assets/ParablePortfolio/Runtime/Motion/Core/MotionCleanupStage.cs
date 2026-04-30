@@ -5,7 +5,7 @@ namespace Parable.Motion
     /// <summary>
     /// 실시간 모션 클린업 파이프라인 스테이지 — T-2.2 핵심.
     ///
-    /// 처리 순서 (Update 매 프레임):
+    /// 처리 순서 (매 프레임):
     ///   1. Jitter 감지: muscle velocity > jitterThreshold → isJitter 플래그
     ///   2. One-Euro Filter: 95개 muscle 각각에 적용
     ///   3. 루트 이동 분리 필터: bodyPosition / bodyRotation 별도 처리
@@ -26,22 +26,20 @@ namespace Parable.Motion
         [Range(0f,   1f)]  public float rootPosBeta      = 0.3f;
 
         [Header("Jitter 감지")]
-        [Tooltip("프레임 간 muscle 변화 속도 임계값. 초과 시 jitter 판정 후 필터 강화")]
-        [Range(0f, 50f)]   public float jitterThreshold  = 15f;
+        [Tooltip("프레임 간 변화 속도 임계값 (단위/초).\n" +
+                 "muscle 공간(-1~1): 15 권장\n" +
+                 "degree 공간(raw): 1500~2000 권장 (정상 동작 최대 ~273°/s, 아웃라이어 ~5000°/s)")]
+        [Range(0f, 2000f)] public float jitterThreshold  = 1500f;
         [Tooltip("jitter 판정 muscle 비율 (0~1). 이 이상이면 프레임 전체 무효 처리")]
         [Range(0f, 1f)]    public float invalidFrameRatio = 0.5f;
 
         [Header("Debug")]
         public bool showJitterDebug = false;
 
-        // 95개 muscle 필터
         OneEuroFilter[] _muscleFilters;
-
-        // 루트 XYZ 별도 필터
         OneEuroFilter _rootPosX, _rootPosY, _rootPosZ;
         OneEuroFilter _rootRotX, _rootRotY, _rootRotZ, _rootRotW;
 
-        // Jitter 통계 (에디터 디버그용)
         [System.NonSerialized] public int  LastJitterCount;
         [System.NonSerialized] public bool LastFrameInvalid;
 
@@ -69,7 +67,6 @@ namespace Parable.Motion
 
         protected override HumanoidPoseData Process(HumanoidPoseData input)
         {
-            // 유효하지 않은 포즈 스킵
             if (!input.isValid) return null;
 
             float dt = Time.deltaTime;
@@ -87,14 +84,11 @@ namespace Parable.Motion
             LastJitterCount   = jitterCount;
             float jitterRatio = (float)jitterCount / input.muscles.Length;
 
-            // jitter 비율이 임계 초과 → 프레임 무효화
             if (jitterRatio >= invalidFrameRatio)
             {
                 LastFrameInvalid = true;
                 if (showJitterDebug)
-                    Debug.LogWarning(
-                        $"[Cleanup] Invalid frame: jitter {jitterRatio:P0} " +
-                        $">= threshold {invalidFrameRatio:P0}");
+                    Debug.LogWarning($"[Cleanup] Invalid frame: jitter {jitterRatio:P0}");
                 return null;
             }
             LastFrameInvalid = false;
@@ -125,7 +119,6 @@ namespace Parable.Motion
             return output;
         }
 
-        // 파라미터 변경 시 필터 재초기화
         void OnValidate()
         {
             if (_muscleFilters == null) return;

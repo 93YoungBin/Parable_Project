@@ -70,7 +70,7 @@ namespace Parable.Motion.Core
             if (_cleanup != null)
             {
                 _sb.AppendFormat("  active  {0}\n", _cleanup.enabled);
-                _sb.AppendFormat("  jitter  {0:F4}\n", _cleanup.jitterThreshold);
+                _sb.AppendFormat("  jitter  {0:F0}\n", _cleanup.jitterThreshold);
             }
             else _sb.AppendLine("  (not assigned)");
 
@@ -86,9 +86,10 @@ namespace Parable.Motion.Core
 
             _sb.AppendLine("[4] IKSolverStage");
             if (_ik != null)
-                _sb.AppendFormat("  LH {0:F2}  RH {1:F2}  LF {2:F2}  RF {3:F2}  Hd {4:F2}\n",
-                    _ik.leftHandWeight, _ik.rightHandWeight,
-                    _ik.leftFootWeight, _ik.rightFootWeight, _ik.headLookWeight);
+                _sb.AppendFormat("  grounding {0}  weight {1:F2}  offset {2:F3}m\n",
+                    _ik.groundingEnabled ? "ON" : "OFF",
+                    _ik.footWeight,
+                    _ik.footHeightOffset);
             else
                 _sb.AppendLine("  (not assigned)");
 

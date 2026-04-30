@@ -15,11 +15,11 @@ namespace Parable.Motion
     ///   HumanPose는 struct라 복사 비용이 있고 타임스탬프/마스크 정보를 담을 수 없음.
     ///   이 래퍼는 파이프라인 메타데이터(시간, 마스크, 유효성)를 함께 전달.
     /// </summary>
-    [Serializable]
+    // 런타임 전용 — 직렬화 대상 아님
     public class HumanoidPoseData
     {
         // ── Muscle 데이터 (Unity HumanTrait 기준 95개) ────────────────
-        public float[] muscles = new float[HumanTrait.MuscleCount];
+        public float[] muscles;
 
         // ── 루트 트랜스폼 ─────────────────────────────────────────────
         public Vector3    bodyPosition = Vector3.zero;
@@ -31,10 +31,14 @@ namespace Parable.Motion
         public PoseMaskFlags activeMask = PoseMaskFlags.FullBody;
 
         // ── 복사 생성자 ──────────────────────────────────────────────
-        public HumanoidPoseData() { }
+        public HumanoidPoseData()
+        {
+            muscles = new float[HumanTrait.MuscleCount];
+        }
 
         public HumanoidPoseData(HumanoidPoseData src)
         {
+            muscles = new float[HumanTrait.MuscleCount];
             Array.Copy(src.muscles, muscles, muscles.Length);
             bodyPosition = src.bodyPosition;
             bodyRotation = src.bodyRotation;
@@ -65,27 +69,27 @@ namespace Parable.Motion
         }
 
         // ── 마스크 기반 muscle 범위 ───────────────────────────────────
-        // HumanTrait muscle 인덱스 범위 (Unity 기준)
-        // 0~20:  Body/Spine/Chest
-        // 21~36: Left Arm/Hand
-        // 37~52: Right Arm/Hand
-        // 53~68: Left Leg/Foot
-        // 69~84: Right Leg/Foot
-        // 85~94: Face (Jaw, Eye 등)
+        // Unity HumanTrait.MuscleName 실제 인덱스 (Unity 2022 LTS 기준, MuscleDebugger 실측 확인)
+        //  0-20 : Body  — Spine, Chest, UpperChest, Neck, Head, Eyes, Jaw
+        // 21-28 : LeftLeg  — Left UpperLeg(3) + LowerLeg(2) + Foot(2) + Toes(1)
+        // 29-36 : RightLeg — Right UpperLeg(3) + LowerLeg(2) + Foot(2) + Toes(1)
+        // 37-45 : LeftArm  — Left Shoulder(2) + Arm(3) + Forearm(2) + Hand(2)
+        // 46-54 : RightArm — Right Shoulder(2) + Arm(3) + Forearm(2) + Hand(2)
+        // 55-94 : Fingers  — Left(20) + Right(20)
         public void ApplyMask(PoseMaskFlags mask, HumanoidPoseData source)
         {
             if (mask.HasFlag(PoseMaskFlags.Body))
                 CopyRange(source, 0, 20);
-            if (mask.HasFlag(PoseMaskFlags.LeftArm))
-                CopyRange(source, 21, 36);
-            if (mask.HasFlag(PoseMaskFlags.RightArm))
-                CopyRange(source, 37, 52);
             if (mask.HasFlag(PoseMaskFlags.LeftLeg))
-                CopyRange(source, 53, 68);
+                CopyRange(source, 21, 28);
             if (mask.HasFlag(PoseMaskFlags.RightLeg))
-                CopyRange(source, 69, 84);
+                CopyRange(source, 29, 36);
+            if (mask.HasFlag(PoseMaskFlags.LeftArm))
+                CopyRange(source, 37, 45);
+            if (mask.HasFlag(PoseMaskFlags.RightArm))
+                CopyRange(source, 46, 54);
             if (mask.HasFlag(PoseMaskFlags.Face))
-                CopyRange(source, 85, 94);
+                CopyRange(source, 55, 94);
         }
 
         void CopyRange(HumanoidPoseData src, int from, int to)
@@ -101,12 +105,13 @@ namespace Parable.Motion
     public enum PoseMaskFlags
     {
         None      = 0,
-        Body      = 1 << 0,   // Spine / Chest / Neck / Head
-        LeftArm   = 1 << 1,
-        RightArm  = 1 << 2,
-        LeftLeg   = 1 << 3,
-        RightLeg  = 1 << 4,
-        Face      = 1 << 5,
+        Body      = 1 << 0,   // Spine / Chest / Neck / Head (0-20)
+        LeftArm   = 1 << 1,   // Left Shoulder ~ Hand (37-45)
+        RightArm  = 1 << 2,   // Right Shoulder ~ Hand (46-54)
+        LeftLeg   = 1 << 3,   // Left UpperLeg ~ Toes (21-28)
+        RightLeg  = 1 << 4,   // Right UpperLeg ~ Toes (29-36)
+        Face      = 1 << 5,   // Fingers (55-94)
+        Arms      = LeftArm | RightArm,               // 팔만 (척추 미포함)
         UpperBody = Body | LeftArm | RightArm,
         LowerBody = LeftLeg | RightLeg,
         FullBody  = Body | LeftArm | RightArm | LeftLeg | RightLeg | Face,
